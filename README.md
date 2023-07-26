@@ -63,6 +63,6 @@ Scripts to perform metabolic task analysis. The analysis is performed using [Cel
 
 Steps:
 
-1. Run Cellfie in Matlab using transcriptomics from PDX and patients. Script: runCellFie_PDX.m
-2. Display results in R. Script: plottingCellfie_PDX.Rmd
+1. Run Cellfie in Matlab using transcriptomics from PDX and patients. Script: [runCellFie_PDX.m](./runCellFie_PDX.m)
+2. Display results in R. Script: [plottingCellfie_PDX.Rmd](./plottingCellfie_PDX.Rmd)
 
