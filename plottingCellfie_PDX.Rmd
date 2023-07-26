@@ -1,0 +1,243 @@
+---
+title: "plottingCellfie_PDX"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+## To make Heatmap - binary and continuous
+library(pheatmap)
+library(reshape2)
+library(ggplot2)
+library(scales) 
+library(matrixStats)
+library(gdata)
+library(gapminder)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## data analysis - cellfie results 
+
+```{r loading_data}
+
+
+score_binary_cellfie_mean=read.csv('score_binary_cellfie_local_mean.csv', header = F, sep = ",")
+score_cellfie_mean=read.csv('score_cellfie_local_mean.csv', header = F, sep = ",")
+
+umap_coord_mean=read.csv('umap_coord_mean_perp10.csv', header = F, sep = ",")
+
+taskInfos_cellfie=read.csv('taskInfos_cellfie.csv', header = T, sep = ",")
+patient_ID=read.csv('patient_ID.csv', header = T, sep = ",")
+patient_ID=as.character(unlist(patient_ID))
+
+
+colnames(score_binary_cellfie_mean)=patient_ID
+colnames(score_cellfie_mean)=patient_ID
+rownames(score_binary_cellfie_mean)=taskInfos_cellfie$taskInfos2
+rownames(score_cellfie_mean)=taskInfos_cellfie$taskInfos2
+
+tumorType=read.csv('tumorType_cellfie.csv', header = T, sep = ",")
+tumorType=as.character(unlist(tumorType))
+
+tumorSubtype=read.csv('tumorSubtype_cellfie.csv', header = T, sep = ",")
+tumorSubtype=as.character(unlist(tumorSubtype))
+
+## Changes - RT becomes NRSTS
+tumorSubtype[tumorSubtype=='RT']='NRSTS'
+tumorSubtype[tumorSubtype=='Sarcoma BCOR/CIC']='BCOR/CIC'
+
+TumorType_Color=readxl::read_xlsx('/Users/sarahcherkaoui/Library/Mobile Documents/com~apple~CloudDocs/Morscher_Lab/Labmembers/Sarah_C/PanPedCan/PDX_Paper/TumorType_Order_Name_Color_PDXpaper.xlsx')
+
+mat_colors$Subtypes=TumorType_Color$`Color (Hex Code)`
+names(mat_colors$Subtypes)=TumorType_Color$abbreviation
+
+unique(tumorSubtype[!tumorSubtype%in%names(mat_colors$Subtypes)])
+
+tumorSubtype[tumorSubtype=='WT']='NPB'
+tumorSubtype[tumorSubtype=='NBL']='NB'
+tumorSubtype[tumorSubtype=='EPD']='EP'
+tumorSubtype[tumorSubtype=='EPD']='EP'
+tumorSubtype[tumorSubtype=='other SC']='other Sarcomas'
+tumorSubtype[tumorSubtype=='other CNS']='other CNS tumors'
+tumorSubtype[tumorSubtype=='other ST']='other solid tumors'
+
+```
+
+## Final Figures - Including Patients + PDX - Threshold Mean (Cellfie)
+
+```{r plot_FinalFigure, echo=FALSE}
+
+# Remove the -1
+pos_rem_neg=which(score_binary_cellfie_mean == -1,arr.ind=T)  
+pos_rem_neg=unique(pos_rem_neg[,1])
+score_binary_cellfie_mean_rm=score_binary_cellfie_mean[-pos_rem_neg,]
+
+
+# To make Annotation
+mat_col <- data.frame(Subtypes = tumorSubtype)
+rownames(mat_col) <- patient_ID
+
+# Row annotation
+mat_row <- data.frame(Systems = taskInfos_cellfie$taskInfos3[-pos_rem_neg])
+rownames(mat_row) <- taskInfos_cellfie$taskInfos2[-pos_rem_neg]
+mat_row_colors <- list(Systems = hue_pal(l = 80)(length(unique(taskInfos_cellfie$taskInfos3))))
+names(mat_row_colors$Systems) <- unique(taskInfos_cellfie$taskInfos3)
+mat_colors_merged=append(mat_colors,mat_row_colors)
+
+
+# Plot only one task
+pos=which(rownames(score_cellfie_mean)=="Tyrosine to dopamine")
+score_binary_cellfie_df=as.data.frame(t(score_cellfie_mean[pos,]))
+score_binary_cellfie_df=cbind(score_binary_cellfie_df,tumorSubtype,tumorType)
+score_binary_cellfie_df$tumorSubtype=factor(score_binary_cellfie_df$tumorSubtype,level=names(mat_colors$Subtypes))
+
+# Select only cancer sutypes with PDX
+score_binary_cellfie_df_filter=score_binary_cellfie_df[score_binary_cellfie_df$tumorSubtype%in%score_binary_cellfie_df$tumorSubtype[startsWith(rownames(score_binary_cellfie_df),'PDX')],]
+
+p <-ggplot(score_binary_cellfie_df_filter,aes(x=tumorSubtype,y=`Tyrosine to dopamine`,fill=tumorSubtype)) +
+    geom_boxplot()+  geom_jitter(data = subset(score_binary_cellfie_df_filter, startsWith(rownames(score_binary_cellfie_df_filter),'Patient')),width = 0.2, aes(fill=tumorSubtype),color = "grey", shape = 21, show.legend = FALSE)+  scale_fill_manual(values=mat_colors$Subtypes)+  theme_classic()+
+    theme(axis.text.x=element_text(angle=45,hjust=1))+ labs(title="", x="Cancer Types",fill = "Types")+
+    theme(plot.title = element_text(hjust = 0.5))+
+  geom_jitter(data = subset(score_binary_cellfie_df_filter, startsWith(rownames(score_binary_cellfie_df_filter),'PDX')),width = 0.2,shape = 24,size=4,show.legend = FALSE)
+  print(p)
+ggsave('Tyrosine_to_dopamine_Mean_continuous_FixedSubtypes.pdf',
+  plot = p, width = 8,height =4)
+
+write.csv(score_binary_cellfie_df_filter,"Tyrosine_to_dopamine_Mean_continuous_FixedSubtypes.csv")
+
+# Plot only one task
+pos=which(rownames(score_cellfie_mean)=="Synthesis of taurine from cysteine")
+score_binary_cellfie_df=as.data.frame(t(score_cellfie_mean[pos,]))
+score_binary_cellfie_df=cbind(score_binary_cellfie_df,tumorSubtype,tumorType)
+score_binary_cellfie_df$tumorSubtype=factor(score_binary_cellfie_df$tumorSubtype,level=names(mat_colors$Subtypes))
+
+p <-ggplot(score_binary_cellfie_df,aes(x=tumorSubtype,y=`Synthesis of taurine from cysteine`,fill=tumorSubtype)) +
+    geom_boxplot()+  geom_jitter(width = 0.2, aes(fill=tumorSubtype),color = "black", shape = 21, show.legend = FALSE)+  scale_fill_manual(values=mat_colors$Subtypes)+  theme_classic()+
+    theme(axis.text.x=element_text(angle=45,hjust=1))+ labs(title="", x="Cancer Types",fill = "Types")+
+    theme(plot.title = element_text(hjust = 0.5))+
+  geom_jitter(data = subset(score_binary_cellfie_df, startsWith(rownames(score_binary_cellfie_df),'PDX')),width = 0.2,fill='#F2B340',color = "black", shape = 21,size=3)
+  print(p)
+ggsave('Synthesis_of_taurine_Mean_continuous_FixedSubtypes.pdf',
+  plot = p, width = 8.6,height =4)
+
+
+# Plot only one task
+pos=which(rownames(score_cellfie_mean)=="Synthesis of L-kynurenine from tryptophan")
+score_binary_cellfie_df=as.data.frame(t(score_cellfie_mean[pos,]))
+score_binary_cellfie_df=cbind(score_binary_cellfie_df,tumorSubtype,tumorType)
+score_binary_cellfie_df$tumorSubtype=factor(score_binary_cellfie_df$tumorSubtype,level=names(mat_colors$Subtypes))
+
+# Select only cancer sutypes with PDX
+score_binary_cellfie_df_filter=score_binary_cellfie_df[score_binary_cellfie_df$tumorSubtype%in%score_binary_cellfie_df$tumorSubtype[startsWith(rownames(score_binary_cellfie_df),'PDX')],]
+
+p <-ggplot(score_binary_cellfie_df_filter,aes(x=tumorSubtype,y=`Synthesis of L-kynurenine from tryptophan`,fill=tumorSubtype)) +
+    geom_boxplot()+  geom_jitter(data = subset(score_binary_cellfie_df_filter, startsWith(rownames(score_binary_cellfie_df_filter),'Patient')),width = 0.2, aes(fill=tumorSubtype),color = "grey", shape = 21, show.legend = FALSE)+  scale_fill_manual(values=mat_colors$Subtypes)+  theme_classic()+
+    theme(axis.text.x=element_text(angle=45,hjust=1))+ labs(title="", x="Cancer Types",fill = "Types")+
+    theme(plot.title = element_text(hjust = 0.5))+
+  geom_jitter(data = subset(score_binary_cellfie_df_filter, startsWith(rownames(score_binary_cellfie_df_filter),'PDX')),width = 0.2,shape = 24,size=4,show.legend = FALSE)
+  print(p)
+ggsave('Synthesis_of_L-kynurenine_from_tryptophan_Mean_continuous_FixedSubtypes.pdf',
+  plot = p, width = 8,height =4)
+
+write.csv(score_binary_cellfie_df_filter,"Synthesis_of_L-kynurenine_from_tryptophan_Mean_continuous_FixedSubtypes.csv")
+
+
+
+```
+
+## Binary Task- Find matched patient and PDX and only plot matching pairs
+
+```{r matchingPairs_Binary, echo=FALSE}
+
+
+Match_PDX_Patient=umap_coord_mean_df$pairedPatient %in%umap_coord_mean_df$pairedPatient[duplicated(umap_coord_mean_df$pairedPatient)]
+
+score_binary_cellfie_mean_rm_matched=score_binary_cellfie_mean_rm[,Match_PDX_Patient]
+PDX_Patient=colnames(score_binary_cellfie_mean_rm[,Match_PDX_Patient])
+PDX_Patient=gsub('Patient_|PDX_','',PDX_Patient)
+order_PDX_Patient=order(PDX_Patient)
+
+# To get patient that are in both
+score_binary_cellfie_mean_rm_matched_order=score_binary_cellfie_mean_rm_matched[,order_PDX_Patient]
+mat_col_matched=mat_col[Match_PDX_Patient,]
+mat_col_matched_order=mat_col_matched[order_PDX_Patient]
+sortedbySubtypes_pdx=order(match(mat_col_matched_order,names(mat_colors_merged$Subtypes)))
+
+
+task=c('Tyrosine to dopamine')
+
+rownames(score_binary_cellfie_mean_rm_matched)%in%task
+
+binary_heatmap_selected = pheatmap(score_binary_cellfie_mean_rm_matched[rownames(score_binary_cellfie_mean_rm_matched)%in%task,order_PDX_Patient[sortedbySubtypes_pdx]], cluster_rows=F, cluster_cols = F, 
+                          fontsize= 10,
+                          fontsize_row=5,
+                          fontsize_col=4,
+                          main = '', 
+                          legend = TRUE,
+                          annotation_row = mat_row,
+                          annotation_col= mat_col,
+                          annotation_colors=mat_colors,
+                          color = c("#EAE8E6", "#484746"),
+                          breaks = c(-1,0, 1),
+                          legend_breaks = c(-0.5,0.5),
+                          legend_labels = c("Inactive","Active"),
+                          display_numbers = F,
+                          treeheight_row = 0, treeheight_col = 0)
+binary_heatmap_selected
+
+
+
+pdf(file = "Tyrosine_to_dopamine_Mean_binary_FixedSubtypes.pdf",   # The directory you want to save the file in
+    width = 10, # The width of the plot in inches
+    height = 2.5) 
+print(binary_heatmap_selected)
+dev.off()
+
+write.csv(score_binary_cellfie_mean_rm_matched[rownames(score_binary_cellfie_mean_rm_matched)%in%task,order_PDX_Patient[sortedbySubtypes_pdx]],'Tyrosine_to_dopamine_Mean_binary_FixedSubtypes.csv')
+
+
+```
+
+## Plot Umap - Patients and PDX
+
+```{r patientsPDX_umap, echo=FALSE}
+
+
+## Plot UMAP
+umap_coord_mean_df=as.data.frame(umap_coord_mean)
+umap_coord_mean_df=cbind(umap_coord_mean_df,tumorSubtype,tumorType,patient_ID)
+umap_coord_mean_df$tumorSubtype=factor(umap_coord_mean_df$tumorSubtype,level=names(mat_colors$Subtypes))
+umap_coord_mean_df$pairedPatient=gsub('Patient_|PDX_','',umap_coord_mean_df$patient_ID)
+umap_coord_mean_df$value=gsub('Patient_|PDX_','',umap_coord_mean_df$patient_ID)
+# To add edge that represent correlation
+umap_coord_mean_df$correlation=rep(NA,length(umap_coord_mean_df$pairedPatient))
+matchedPDX_Patients=umap_coord_mean_df$pairedPatient[duplicated(umap_coord_mean_df$pairedPatient)]
+for(i in 1:length(matchedPDX_Patients)){
+  posMatch=which(umap_coord_mean_df$pairedPatient%in%matchedPDX_Patients[i])
+  correlation=cor(score_cellfie_mean[,posMatch])
+  umap_coord_mean_df$correlation[posMatch]=correlation[1,2]
+}
+
+#umap_coord_mean_df$pairedPatient=gsub('_.*','',umap_coord_mean_df$pairedPatient)
+
+
+
+p <-ggplot(umap_coord_mean_df,aes(x=V1,y=V2,fill=tumorSubtype)) +
+  geom_point(aes(fill=tumorSubtype),color = "grey", shape = 21, show.legend = TRUE,size=2,alpha=1)+  scale_fill_manual(values=mat_colors$Subtypes)+  theme_classic()+ labs(title="", y='UMAP 2',x="UMAP 1",fill = "Types")+
+ # geom_line(aes(group = pairedPatient),color="darkgrey")+
+  theme(plot.title = element_text(hjust = 0.5))+
+ # geom_point(data = subset(umap_coord_mean_df, umap_coord_mean_df$pairedPatient %in%umap_coord_mean_df$pairedPatient[duplicated(umap_coord_mean_df$pairedPatient)]),aes(fill=tumorSubtype),color = "blue", shape = 21,size=4,show.legend = FALSE)+
+  geom_point(data = subset(umap_coord_mean_df, startsWith(patient_ID,'PDX')),aes(fill=tumorSubtype), shape = 24,size=4,show.legend = FALSE)#+ 
+  #+
+   #geom_line(aes(group = pairedPatient,size=correlation),color="black",alpha=0.5)
+  #scale_size(range = c(1, 4))
+  #geom_line(aes(group = pairedPatient),color="black",alpha=0.3)
+p
+
+ggsave('Umap_PDX_Patient_perp10_FixedSubtypes.pdf',plot = p, width = 9,height =6)
+
+
+
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
